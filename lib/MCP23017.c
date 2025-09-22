@@ -19,11 +19,28 @@ uint8_t read_register(uint8_t MCP23017_address, uint8_t reg){
 
 
 void MCP23017_init(MCP23017 *expander){
+    // Definindo direçao dos pinos e habilitando pull-ups
     write_register(expander->address, MCP_IODIRA, expander->portA.iodir);
     write_register(expander->address, MCP_GPPUA, expander->portA.iodir); 
-
     write_register(expander->address, MCP_IODIRB, expander->portB.iodir);
     write_register(expander->address, MCP_GPPUB, expander->portB.iodir); 
+
+    // Configurando interrupções
+    // Ativa o modo espelhado: MIRROR = 1 (bit 6)
+    write_register(expander->address, MCP_IOCON, 0b01000000);
+
+    // Habilita interrupções para PORTA e PORTB
+    write_register(expander->address, MCP_IODIRA, 0xFF);
+    write_register(expander->address, MCP_GPPUA, 0xFF);
+    write_register(expander->address, MCP_GPINTENA, 0xFF);
+
+    write_register(expander->address, MCP_IODIRB, 0xFF);
+    write_register(expander->address, MCP_GPPUB, 0xFF);
+    write_register(expander->address, MCP_GPINTENB, 0xFF);
+    
+    // Limpa interrupções pendentes
+    read_register(expander->address, MCP_IODIRA);
+    read_register(expander->address, MCP_IODIRB);
 }
 
 

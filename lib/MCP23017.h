@@ -35,6 +35,17 @@
 #define MCP_GPPUB 0x0D
 #define MCP_GPIOB 0x13
 
+// Registradores de interrupção
+#define MCP_GPINTENA 0x04 // Habilita interrupção por pino para PORTA
+#define MCP_GPINTENB 0x05 // Habilita interrupção por pino para PORTB
+#define MCP_INTCONA 0x08 // Controle de comparação da interrupção
+#define MCP_INTFA 0x0E // Flags de interrupçao
+#define MCP_INTFB 0x0F  // Flags de interrupçao
+#define MCP_INTCAPA 0x10 // Captura o estado e limpa a interrupção
+#define MCP_INTCAPB 0x11 // Captura o estado e limpa a interrupção
+
+#define MCP_IOCON 0x0A
+
 typedef struct {
     // Struct para armazenar as informaçoes de um conjunto de pinos (PORTA ou PORTB)
     uint8_t iodir; // Direção dos pinos (1 = entrada, 0 = saída)
@@ -43,6 +54,7 @@ typedef struct {
 
 typedef struct {
     uint8_t address; // Endereço I2C do MCP23017
+    int interrupt_pin; // Pino de interrupção conectado ao MCP23017
     MCP23017_PortInfo portA; // Informações da PORTA
     MCP23017_PortInfo portB; // Informações da PORTB
 } MCP23017;
