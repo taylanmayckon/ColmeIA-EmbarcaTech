@@ -27,7 +27,7 @@ include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_i
 
 include_directories( ${CMAKE_SOURCE_DIR}/lib ) 
 
-add_executable(ColmeIA-EmbarcaTech ColmeIA-EmbarcaTech.c )
+add_executable(ColmeIA-EmbarcaTech ColmeIA-EmbarcaTech.c lib/MCP23017.c)
 
 pico_set_program_name(ColmeIA-EmbarcaTech "ColmeIA-EmbarcaTech")
 pico_set_program_version(ColmeIA-EmbarcaTech "0.1")
