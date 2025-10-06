@@ -33,10 +33,15 @@ void MCP23017_init(MCP23017 *expander){
     write_register(expander->address, MCP_IODIRA, 0xFF);
     write_register(expander->address, MCP_GPPUA, 0xFF);
     write_register(expander->address, MCP_GPINTENA, 0xFF);
+    write_register(expander->address, MCP_INTCONA, 0xFF); // habilita a comparação com o registrador "DEF_VAL"
+    write_register(expander->address, MCP_DEFVALA, 0xFF); // Definir DEFVAL = 1 (interrupção quando GPA0 cair para 0 → borda de descida)
+
 
     write_register(expander->address, MCP_IODIRB, 0xFF);
     write_register(expander->address, MCP_GPPUB, 0xFF);
     write_register(expander->address, MCP_GPINTENB, 0xFF);
+    write_register(expander->address, MCP_INTCONB, 0xFF); // habilita a comparação com o registrador "DEF_VAL"
+    write_register(expander->address, MCP_DEFVALB, 0xFF); 
     
     // Limpa interrupções pendentes
     read_register(expander->address, MCP_IODIRA);

@@ -38,7 +38,10 @@
 // Registradores de interrupção
 #define MCP_GPINTENA 0x04 // Habilita interrupção por pino para PORTA
 #define MCP_GPINTENB 0x05 // Habilita interrupção por pino para PORTB
+#define MCP_DEFVALA 0x06 // Valor padrão de comparação
+#define MCP_DEFVALB 0x07 // Valor padrão de comparação
 #define MCP_INTCONA 0x08 // Controle de comparação da interrupção
+#define MCP_INTCONB 0x09 // Controle de comparação da interrupção
 #define MCP_INTFA 0x0E // Flags de interrupçao
 #define MCP_INTFB 0x0F  // Flags de interrupçao
 #define MCP_INTCAPA 0x10 // Captura o estado e limpa a interrupção
