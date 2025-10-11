@@ -2,6 +2,11 @@
 
 void cria_fila(FILA *pf){
     *pf = (DESCRITOR *)malloc(sizeof(DESCRITOR));
+
+    if(!(*pf)) {
+        printf("[ERRO NA FILA] Memória insuficiente!\n");
+    }
+
     (*pf)->INICIO = (*pf)->FIM = NULL;
 }
 
