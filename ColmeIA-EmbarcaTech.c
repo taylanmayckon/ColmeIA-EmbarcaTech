@@ -12,29 +12,15 @@
 #define I2C_SDA 0
 #define I2C_SCL 1
 
-// Endereços dos Expansores MCP23017
+// Endereços e GPIO da ISR dos Expansores MCP23017
 #define EXPANDER1_ADDR 0x20
 #define EXPANDER1_INT_PIN 9
+// Tamanho da fila de cada par de sensor
+#define BEE_QUEUE_LENGTH 10
 
 // Timeout para resetar o estado (ms)
 #define SENSOR_TIMEOUT_MS 2000
-
-#define PASSING_INTERVAL 1000
-
 #define COUNTER_TIMEOUT 3000
-
-// Estados de passagem de cada par de sensores
-typedef enum {
-    STATE_IDLE,           // Nenhum sensor ativado
-    STATE_ENTRANCE,       // Sensor A ativado (entrada)
-    STATE_COMPLETED       // Ambos sensores ativados (passagem completa)
-} sensor_state_t;
-
-// Estrutura para rastrear cada par de sensores
-typedef struct {
-    sensor_state_t state;
-    TickType_t last_trigger_time;
-} sensor_pair_t;
 
 
 // Struct para o evento de passagem de abelha
@@ -53,42 +39,24 @@ QueueHandle_t beeQueue1[8];
 SemaphoreHandle_t xSemaphoreInt1;
 
 // Contador principal de abelhas entrando
-uint32_t bee_counter_in = 0;
+uint32_t bee_counter = 0;
 
 // Mutex para proteger acesso ao contador
 SemaphoreHandle_t xMutexCounter;
 
-// Função para resetar pares de sensores que ultrapassaram o timeout
-// void check_sensor_timeouts(void) {
-//     TickType_t current_time = xTaskGetTickCount();
-//     for(int i = 0; i < 8; i++) {
-//         if(sensor_pairs1[i].state != STATE_IDLE) {
-//             TickType_t elapsed = current_time - sensor_pairs1[i].last_trigger_time;
-//             if(elapsed > pdMS_TO_TICKS(SENSOR_TIMEOUT_MS)) {
-//                 printf("Timeout no par de sensores %d - resetando estado\n", i);
-//                 sensor_pairs1[i].state = STATE_IDLE;
-//             }
-//         }
-//     }
-// }
-
-
-void bee_consume_queues();
-
 void bee_update_queues(MCP23017 *expander, QueueHandle_t *beeQueue){
     // Funcao para analisar as flags de interrupçao e popular as filas
-    uint8_t flagA = read_register(expander->address, MCP_INTFA);
-    uint8_t flagB = read_register(expander->address, MCP_INTFB);
+    uint8_t flagA = expander->intfA;
+    uint8_t flagB = expander->intfB;
     TickType_t current_time = xTaskGetTickCount();
     BeeEvent_t event;
 
     // Processa sensores da PORTA A (entrada da colmeia)
     if(flagA){
-        uint8_t captured_value = read_register(expander->address, MCP_INTCAPA);
         for(int i = 0; i < 8; i++) {
             if (flagA & (1 << i)) {
                 // Verifica se foi borda de descida (sensor ativado)
-                if ((captured_value & (1 << i)) == 0) {
+                if ((expander->capA & (1 << i)) == 0) {
                     printf("Sensor A%d ativado (ENTRADA DA COLMEIA)\n", i);
                     event.port='A';
                     event.sensor_id=i;
@@ -101,10 +69,9 @@ void bee_update_queues(MCP23017 *expander, QueueHandle_t *beeQueue){
     }
     // Processa sensores da PORTA B (dentro da colmeia)
     if(flagB){
-        uint8_t captured_value = read_register(expander->address, MCP_INTCAPB);
         for(int i = 0; i < 8; i++) {
             if (flagB & (1 << i)) {
-                if((captured_value & (1 << i)) == 0){
+                if((expander->capB & (1 << i)) == 0){
                     printf("Sensor B%d ativado (DENTRO DA COLMEIA)\n", i);
                     event.port='B';
                     event.sensor_id=i;
@@ -117,8 +84,19 @@ void bee_update_queues(MCP23017 *expander, QueueHandle_t *beeQueue){
     }
 }
 
-// ISR - apenas sinaliza o semáforo
+
+// Atualiza as flags de interrupcao do expansor acionado
+void exp_handle_flags(MCP23017 *expander){
+    expander->intfA = read_register(expander->address, MCP_INTFA);
+    expander->intfB = read_register(expander->address, MCP_INTFB);
+    expander->capA  = read_register(expander->address, MCP_INTCAPA);
+    expander->capB  = read_register(expander->address, MCP_INTCAPB);
+}
+
+// ISR - apenas sinaliza o semáforo de cada expansor
 void gpio_irq_handler(uint gpio, uint32_t events){
+    // Aplica um debounce por GPIO
+    // last_gpio e last_int_timestamp no caso, pra impedir que acione varias vezes a interrupcao
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     
     if(gpio == EXPANDER1_INT_PIN) {
@@ -128,6 +106,9 @@ void gpio_irq_handler(uint gpio, uint32_t events){
 }
 
 void vExpander1(void *params) {
+    // Essa funcao só serve pra capturar as interrupcoes e adicionar valores nas filas
+    // Entao ela só precisa dessa parte de checar o semaforo da propria interrupcao no while(true)
+    // O tratamento das filas fica para outra task
     expander1.address = EXPANDER1_ADDR;
     expander1.interrupt_pin = EXPANDER1_INT_PIN;
     expander1.portA.iodir = 0b11111111; // Todos como entrada
@@ -135,7 +116,7 @@ void vExpander1(void *params) {
 
     // Inicializa as filas dos pares de sensores
     for(int i = 0; i < 8; i++) {
-        beeQueue1[i] = xQueueCreate(10, sizeof(BeeEvent_t));
+        beeQueue1[i] = xQueueCreate(BEE_QUEUE_LENGTH, sizeof(BeeEvent_t));
         if (beeQueue1[i] == NULL) {
             printf("Erro ao criar a fila para o sensor %d do expansor %d!\n", i, expander1.address);
         }
@@ -145,42 +126,43 @@ void vExpander1(void *params) {
     xSemaphoreInt1 = xSemaphoreCreateBinary();
     MCP23017_init(&expander1);
     // Limpa qualquer interrupção pendente
-    read_register(expander1.address, MCP_INTCAPA);
-    read_register(expander1.address, MCP_INTCAPB);
+    exp_handle_flags(&expander1);
 
     gpio_set_irq_enabled_with_callback(expander1.interrupt_pin, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
 
     while (true) {
         // Aguarda sinal de interrupção
         if(xSemaphoreTake(xSemaphoreInt1, portMAX_DELAY) == pdTRUE) {
+            exp_handle_flags(&expander1);
             bee_update_queues(&expander1, beeQueue1);
         }
-        
-        // Verifica timeouts periodicamente
-        check_sensor_timeouts();
-        
-        vTaskDelay(pdMS_TO_TICKS(PASSING_INTERVAL));
     }
 }
 
+
+
+void vBeeConsumeQueuesTask(void *params){
+
+}
+
 // Task opcional para exibir estatísticas
-// void vStatistics(void *params) {
-//     while(true) {
-//         vTaskDelay(pdMS_TO_TICKS(10000)); // A cada 10 segundos
+void vStatistics(void *params) {
+    while(true) {
+        vTaskDelay(pdMS_TO_TICKS(10000)); // A cada 10 segundos
         
-//         if(xSemaphoreTake(xMutexCounter, portMAX_DELAY) == pdTRUE) {
-//             printf("\n=== ESTATISTICAS ===\n");
-//             printf("Total de abelhas detectadas: %lu\n", bee_counter_in);
-//             printf("====================\n\n");
-//             xSemaphoreGive(xMutexCounter);
-//         }
-//     }
-// }
+        if(xSemaphoreTake(xMutexCounter, portMAX_DELAY) == pdTRUE) {
+            printf("\n=== ESTATISTICAS ===\n");
+            printf("Total de abelhas detectadas: %lu\n", bee_counter);
+            printf("====================\n\n");
+            xSemaphoreGive(xMutexCounter);
+        }
+    }
+}
 
 int main(){
     stdio_init_all();
     
-    bee_counter_in = 0;
+    bee_counter = 0;
 
     // Iniciando o I2C 
     i2c_init(I2C_PORT, 400 * 1000);
@@ -193,9 +175,12 @@ int main(){
     xMutexCounter = xSemaphoreCreateMutex();
 
     // Cria as tasks
-    xTaskCreate(vExpander1, "Sensor Monitor", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
+    xTaskCreate(vExpander1, "Expansor1", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
+    xTaskCreate(vBeeConsumeQueuesTask, "Bee Consume Queues", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
+    
+    // Task opcional para debug
     //xTaskCreate(vStatistics, "Statistics", configMINIMAL_STACK_SIZE + 128, NULL, 2, NULL);
-
+    
     vTaskStartScheduler();
     panic_unsupported();
 }
