@@ -60,6 +60,9 @@ typedef struct {
     int interrupt_pin; // Pino de interrupção conectado ao MCP23017
     MCP23017_PortInfo portA; // Informações da PORTA
     MCP23017_PortInfo portB; // Informações da PORTB
+    uint8_t intfA, intfB;
+    uint8_t capA, capB; 
+    // TickType_t last_interrupt_time; // Caso queira implementar debounce em cada expansor
 } MCP23017;
 
 void write_register(uint8_t MCP23017_address, uint8_t reg, uint8_t value);
