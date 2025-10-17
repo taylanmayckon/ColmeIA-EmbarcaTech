@@ -36,91 +36,81 @@ typedef struct {
     TickType_t last_trigger_time;
 } sensor_pair_t;
 
+
+// Struct para o evento de passagem de abelha
+typedef struct{
+    uint8_t sensor_id; // 0-7
+    char port; // A ou B
+    // Depois define direito se A vai ser entrada, B vai ser saida...
+    TickType_t timestamp; 
+} BeeEvent_t;
+
 // Expansores conectados
 MCP23017 expander1;
-
-// Array de 8 pares de sensores (A0-B0, A1-B1, ... A7-B7)
-sensor_pair_t sensor_pairs[8];
+// Filas para cada expansor
+QueueHandle_t beeQueue1[8];
+// Semáforo para sinalizar interrupção de cada expansor
+SemaphoreHandle_t xSemaphoreInt1;
 
 // Contador principal de abelhas entrando
 uint32_t bee_counter_in = 0;
-
-// Semáforo para sinalizar interrupção
-SemaphoreHandle_t xSemaphoreInt;
 
 // Mutex para proteger acesso ao contador
 SemaphoreHandle_t xMutexCounter;
 
 // Função para resetar pares de sensores que ultrapassaram o timeout
-void check_sensor_timeouts(void) {
-    TickType_t current_time = xTaskGetTickCount();
-    
-    for(int i = 0; i < 8; i++) {
-        if(sensor_pairs[i].state != STATE_IDLE) {
-            TickType_t elapsed = current_time - sensor_pairs[i].last_trigger_time;
-            if(elapsed > pdMS_TO_TICKS(SENSOR_TIMEOUT_MS)) {
-                printf("Timeout no par de sensores %d - resetando estado\n", i);
-                sensor_pairs[i].state = STATE_IDLE;
-            }
-        }
-    }
-}
+// void check_sensor_timeouts(void) {
+//     TickType_t current_time = xTaskGetTickCount();
+//     for(int i = 0; i < 8; i++) {
+//         if(sensor_pairs1[i].state != STATE_IDLE) {
+//             TickType_t elapsed = current_time - sensor_pairs1[i].last_trigger_time;
+//             if(elapsed > pdMS_TO_TICKS(SENSOR_TIMEOUT_MS)) {
+//                 printf("Timeout no par de sensores %d - resetando estado\n", i);
+//                 sensor_pairs1[i].state = STATE_IDLE;
+//             }
+//         }
+//     }
+// }
 
-void handle_flags(MCP23017 *expander){
+
+void bee_consume_queues();
+
+void bee_update_queues(MCP23017 *expander, QueueHandle_t *beeQueue){
+    // Funcao para analisar as flags de interrupçao e popular as filas
     uint8_t flagA = read_register(expander->address, MCP_INTFA);
     uint8_t flagB = read_register(expander->address, MCP_INTFB);
-    
     TickType_t current_time = xTaskGetTickCount();
+    BeeEvent_t event;
 
     // Processa sensores da PORTA A (entrada da colmeia)
     if(flagA){
         uint8_t captured_value = read_register(expander->address, MCP_INTCAPA);
-        
         for(int i = 0; i < 8; i++) {
             if (flagA & (1 << i)) {
                 // Verifica se foi borda de descida (sensor ativado)
                 if ((captured_value & (1 << i)) == 0) {
-                    printf("Sensor A%d ativado (ENTRADA)\n", i);
-                    
-                    // Atualiza o estado do par de sensores
-                    if(sensor_pairs[i].state == STATE_IDLE) {
-                        sensor_pairs[i].state = STATE_ENTRANCE;
-                        sensor_pairs[i].last_trigger_time = current_time;
-                        printf("  -> Aguardando sensor B%d para confirmar passagem\n", i);
-                    }
+                    printf("Sensor A%d ativado (ENTRADA DA COLMEIA)\n", i);
+                    event.port='A';
+                    event.sensor_id=i;
+                    event.timestamp=current_time;
+                    if(xQueueSend(beeQueue[i], &event, 0) != pdPASS)
+                        printf("\n[QUEUE SEND] Erro ao registrar dado do Expansor %d, pino A%d\n.", expander->address, i);
                 }
             }
         }
     }
-
-    // Processa sensores da PORTA B (centro da colmeia)
+    // Processa sensores da PORTA B (dentro da colmeia)
     if(flagB){
         uint8_t captured_value = read_register(expander->address, MCP_INTCAPB);
-        
         for(int i = 0; i < 8; i++) {
             if (flagB & (1 << i)) {
-                // Verifica se foi borda de descida (sensor ativado)
-                if ((captured_value & (1 << i)) == 0) {
-                    printf("Sensor B%d ativado (CENTRO)\n", i);
-                    
-                    // Verifica se o sensor A correspondente foi ativado antes
-                    if(sensor_pairs[i].state == STATE_ENTRANCE) {
-                        // Passagem completa detectada!
-                        sensor_pairs[i].state = STATE_COMPLETED;
-                        
-                        // Incrementa o contador com proteção de mutex
-                        if(xSemaphoreTake(xMutexCounter, portMAX_DELAY) == pdTRUE) {
-                            bee_counter_in++;
-                            printf("*** ABELHA DETECTADA NO CANAL %d! Total: %lu ***\n", i, bee_counter_in);
-                            xSemaphoreGive(xMutexCounter);
-                        }
-                        
-                        // Reseta o estado após um delay para evitar contagem duplicada
-                        vTaskDelay(pdMS_TO_TICKS(COUNTER_TIMEOUT));
-                        sensor_pairs[i].state = STATE_IDLE;
-                    } else {
-                        printf("  -> Sensor B%d ativado mas A%d não foi ativado antes (ignorado)\n", i, i);
-                    }
+                if((captured_value & (1 << i)) == 0){
+                    printf("Sensor B%d ativado (DENTRO DA COLMEIA)\n", i);
+                    event.port='B';
+                    event.sensor_id=i;
+                    event.timestamp=current_time;
+                    if(xQueueSend(beeQueue[i], &event, 0) != pdPASS)
+                        printf("\n[QUEUE SEND] Erro ao registrar dado do Expansor %d, pino B%d.\n", expander->address, i);
                 }
             }
         }
@@ -132,7 +122,7 @@ void gpio_irq_handler(uint gpio, uint32_t events){
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     
     if(gpio == EXPANDER1_INT_PIN) {
-        xSemaphoreGiveFromISR(xSemaphoreInt, &xHigherPriorityTaskWoken);
+        xSemaphoreGiveFromISR(xSemaphoreInt1, &xHigherPriorityTaskWoken);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 }
@@ -143,30 +133,27 @@ void vExpander1(void *params) {
     expander1.portA.iodir = 0b11111111; // Todos como entrada
     expander1.portB.iodir = 0b11111111; // Todos como entrada
 
-    // Inicializa todos os pares de sensores
+    // Inicializa as filas dos pares de sensores
     for(int i = 0; i < 8; i++) {
-        sensor_pairs[i].state = STATE_IDLE;
-        sensor_pairs[i].last_trigger_time = 0;
+        beeQueue1[i] = xQueueCreate(10, sizeof(BeeEvent_t));
+        if (beeQueue1[i] == NULL) {
+            printf("Erro ao criar a fila para o sensor %d do expansor %d!\n", i, expander1.address);
+        }
     }
     
-    xSemaphoreInt = xSemaphoreCreateBinary();
-    xMutexCounter = xSemaphoreCreateMutex();
-
+    // Inicializando o semáforo para a interrupçao desse expansor
+    xSemaphoreInt1 = xSemaphoreCreateBinary();
     MCP23017_init(&expander1);
-
     // Limpa qualquer interrupção pendente
     read_register(expander1.address, MCP_INTCAPA);
     read_register(expander1.address, MCP_INTCAPB);
 
     gpio_set_irq_enabled_with_callback(expander1.interrupt_pin, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
 
-    printf("Sistema de contagem de abelhas inicializado!\n");
-    printf("Aguardando deteccoes...\n\n");
-
     while (true) {
         // Aguarda sinal de interrupção
-        if(xSemaphoreTake(xSemaphoreInt, pdMS_TO_TICKS(100)) == pdTRUE) {
-            handle_flags(&expander1);
+        if(xSemaphoreTake(xSemaphoreInt1, portMAX_DELAY) == pdTRUE) {
+            bee_update_queues(&expander1, beeQueue1);
         }
         
         // Verifica timeouts periodicamente
@@ -201,6 +188,9 @@ int main(){
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA);
     gpio_pull_up(I2C_SCL);
+
+    // Mutex para acesso do contador de abelhas
+    xMutexCounter = xSemaphoreCreateMutex();
 
     // Cria as tasks
     xTaskCreate(vExpander1, "Sensor Monitor", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
