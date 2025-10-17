@@ -22,14 +22,6 @@
 #define BEE_EVENT_TIMEOUT_MS 5000 // Tempo para descartar abelhas que nao completam a passagem
 #define BEE_PASSAGE_WINDOW_MS 2000 // Janela para aceitar uma passagem de abelha (A->B e B->A)
 
-// Struct para o evento de passagem de abelha
-typedef struct{
-    uint8_t sensor_id; // 0-7
-    char port; // A ou B
-    // Depois define direito se A vai ser entrada, B vai ser saida...
-    TickType_t timestamp; 
-} BeeEvent_t;
-
 // Expansores conectados
 MCP23017 expander1;
 // Filas para cada expansor
@@ -48,7 +40,6 @@ void bee_update_queues(MCP23017 *expander, QueueHandle_t beeQueue[2][8]){
     uint8_t flagA = expander->intfA;
     uint8_t flagB = expander->intfB;
     TickType_t current_time = xTaskGetTickCount();
-    BeeEvent_t event;
 
     // Processa sensores da PORTA A (entrada da colmeia)
     if(flagA){
@@ -57,10 +48,7 @@ void bee_update_queues(MCP23017 *expander, QueueHandle_t beeQueue[2][8]){
                 // Verifica se foi borda de descida (sensor ativado)
                 if ((expander->capA & (1 << i)) == 0) {
                     printf("Sensor A%d ativado (ENTRADA DA COLMEIA)\n", i);
-                    event.port='A';
-                    event.sensor_id=i;
-                    event.timestamp=current_time;
-                    if(xQueueSend(beeQueue[0][i], &event, 0) != pdPASS)
+                    if(xQueueSend(beeQueue[0][i], &current_time, 0) != pdPASS)
                         printf("\n[QUEUE SEND] Erro ao registrar dado do Expansor %d, pino A%d\n.", expander->address, i);
                 }
             }
@@ -72,10 +60,7 @@ void bee_update_queues(MCP23017 *expander, QueueHandle_t beeQueue[2][8]){
             if (flagB & (1 << i)) {
                 if((expander->capB & (1 << i)) == 0){
                     printf("Sensor B%d ativado (DENTRO DA COLMEIA)\n", i);
-                    event.port='B';
-                    event.sensor_id=i;
-                    event.timestamp=current_time;
-                    if(xQueueSend(beeQueue[1][i], &event, 0) != pdPASS)
+                    if(xQueueSend(beeQueue[1][i], &current_time, 0) != pdPASS)
                         printf("\n[QUEUE SEND] Erro ao registrar dado do Expansor %d, pino B%d.\n", expander->address, i);
                 }
             }
@@ -117,7 +102,7 @@ void vExpander1(void *params) {
     // beeQueue[PORT][CANAL], uma fila para cada canal (Entrada/Saida)
     for(int i = 0; i < NUM_CHANNELS_MCP; i++) {
         for(int j = 0; j<2; j++){
-            beeQueue1[j][i] = xQueueCreate(BEE_QUEUE_LENGTH, sizeof(BeeEvent_t));
+            beeQueue1[j][i] = xQueueCreate(BEE_QUEUE_LENGTH, sizeof(TickType_t));
             if (beeQueue1[j][i] == NULL) {
                 printf("Erro ao criar a fila para o sensor %d do port %d do expansor %d!\n", i, j, expander1.address);
             }
