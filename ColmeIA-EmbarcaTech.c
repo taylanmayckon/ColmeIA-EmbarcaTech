@@ -30,7 +30,7 @@ QueueHandle_t beeQueue1[2][NUM_CHANNELS_MCP]; // [0][X] PortA e [1][X] PortB
 SemaphoreHandle_t xSemaphoreInt1;
 
 // Contador principal de abelhas entrando
-uint32_t bee_counter = 0;
+uint32_t bee_counter;
 
 // Mutex para proteger acesso ao contador
 SemaphoreHandle_t xMutexCounter;
@@ -145,7 +145,7 @@ void consume_individual_expander_queue(QueueHandle_t beeQueue[2][8]){
                     // Entrada válida
                     if(xSemaphoreTake(xMutexCounter, portMAX_DELAY) == pdTRUE){
                         bee_counter++;
-                        // printf("[ENTRADA VÁLIDA] no canal %d! Total: %lu\n", channel, bee_counter);
+                        printf("[ENTRADA VÁLIDA] no canal %d! Total: %lu\n", channel, bee_counter);
                         xSemaphoreGive(xMutexCounter);
                     }
                     // Removendo os eventos processados
@@ -154,7 +154,7 @@ void consume_individual_expander_queue(QueueHandle_t beeQueue[2][8]){
                 }
                 else{
                     // O evento de entrada é muito antigo, já descarta o A
-                    // printf("[TIMEOUT] Canal A%d.\n", channel);
+                    printf("[TIMEOUT] Canal A%d.\n", channel);
                     xQueueReceive(beeQueue[0][channel], &entry_time, 0);
                 }
             }
@@ -169,7 +169,7 @@ void consume_individual_expander_queue(QueueHandle_t beeQueue[2][8]){
                         // Por seguranca vou colocar uma validacao se o contador nao é 0
                         if(bee_counter)
                             bee_counter--;
-                        // printf("[FILA - SAIDA VÁLIDA] No canal %d! Total: %lu\n", channel, bee_counter);
+                        printf("[FILA - SAIDA VÁLIDA] No canal %d! Total: %lu\n", channel, bee_counter);
                         xSemaphoreGive(xMutexCounter);
                     }
                     // Removendo os eventos processados
@@ -178,7 +178,7 @@ void consume_individual_expander_queue(QueueHandle_t beeQueue[2][8]){
                 }
                 else{
                     // Evento de entrada muito antigo, descarta B
-                    // printf("[FILA - TIMEOUT] Canal B%d.\n", channel);
+                    printf("[FILA - TIMEOUT] Canal B%d.\n", channel);
                     xQueueReceive(beeQueue[1][channel], &exit_time, 0);
                 }
             }
@@ -190,14 +190,14 @@ void consume_individual_expander_queue(QueueHandle_t beeQueue[2][8]){
             // Evento de entrada antigo
             if(xQueuePeek(beeQueue[0][channel], &entry_time, 0) == pdPASS){
                 if((current_time - entry_time) > pdMS_TO_TICKS(BEE_EVENT_TIMEOUT_MS)){
-                    // printf("[FILA - TIMEOUT] Limpando evento de entrada do canal A%d\n", channel);
+                    printf("[FILA - TIMEOUT] Limpando evento de entrada do canal A%d\n", channel);
                     xQueueReceive(beeQueue[0][channel], &entry_time, 0); // Remove da fila
                 }
             }
             // Evento de saida antigo
             if(xQueuePeek(beeQueue[1][channel], &exit_time, 0) == pdPASS){
                 if((current_time - exit_time) > pdMS_TO_TICKS(BEE_EVENT_TIMEOUT_MS)){
-                    // printf("[FILA - TIMEOUT] Limpando evento de saida do canal B%d\n", channel);
+                    printf("[FILA - TIMEOUT] Limpando evento de saida do canal B%d\n", channel);
                     xQueueReceive(beeQueue[1][channel], &exit_time, 0); // Remove da fila
                 }
             }
@@ -209,6 +209,8 @@ void vBeeConsumeQueuesTask(void *params){
     // Task para limpar as filas de cada expansor separadamente
     while(true){
         consume_individual_expander_queue(beeQueue1);
+
+        // printf("[%s] Contagem de abelhas: %d\n",  pcTaskGetName(NULL), bee_counter);
 
         vTaskDelay(pdMS_TO_TICKS(50));
     }
