@@ -30,7 +30,7 @@ QueueHandle_t beeQueue1[2][NUM_CHANNELS_MCP]; // [0][X] PortA e [1][X] PortB
 SemaphoreHandle_t xSemaphoreInt1;
 
 // Contador principal de abelhas entrando
-uint32_t bee_counter;
+long int bee_counter;
 
 // Mutex para proteger acesso ao contador
 SemaphoreHandle_t xMutexCounter;
@@ -66,15 +66,6 @@ void bee_update_queues(MCP23017 *expander, QueueHandle_t beeQueue[2][8]){
             }
         }
     }
-}
-
-
-// Atualiza as flags de interrupcao do expansor acionado
-void exp_handle_flags(MCP23017 *expander){
-    expander->intfA = read_register(expander->address, MCP_INTFA);
-    expander->intfB = read_register(expander->address, MCP_INTFB);
-    expander->capA  = read_register(expander->address, MCP_INTCAPA);
-    expander->capB  = read_register(expander->address, MCP_INTCAPB);
 }
 
 // ISR - apenas sinaliza o semáforo de cada expansor
@@ -145,7 +136,7 @@ void consume_individual_expander_queue(QueueHandle_t beeQueue[2][8]){
                     // Entrada válida
                     if(xSemaphoreTake(xMutexCounter, portMAX_DELAY) == pdTRUE){
                         bee_counter++;
-                        printf("[ENTRADA VÁLIDA] no canal %d! Total: %lu\n", channel, bee_counter);
+                        printf("[ENTRADA VÁLIDA] no canal %d! Total: %ld\n", channel, bee_counter);
                         xSemaphoreGive(xMutexCounter);
                     }
                     // Removendo os eventos processados
@@ -165,11 +156,9 @@ void consume_individual_expander_queue(QueueHandle_t beeQueue[2][8]){
                 if((entry_time - exit_time) <= pdMS_TO_TICKS(BEE_PASSAGE_WINDOW_MS)){
                     // Saida valida
                     if(xSemaphoreTake(xMutexCounter, portMAX_DELAY) == pdTRUE){
-                        // NOTA: Será que isso vai bugar o código? E se uma abelha sai na hora que o sistema liga?
-                        // Por seguranca vou colocar uma validacao se o contador nao é 0
-                        if(bee_counter)
-                            bee_counter--;
-                        printf("[FILA - SAIDA VÁLIDA] No canal %d! Total: %lu\n", channel, bee_counter);
+                        // NOTA: Do jeito que ta, o contador verifica o FLUXO de abelhas (quantas sairam da colmeia)
+                        bee_counter--;
+                        printf("[FILA - SAIDA VÁLIDA] No canal %d! Total: %ld\n", channel, bee_counter);
                         xSemaphoreGive(xMutexCounter);
                     }
                     // Removendo os eventos processados

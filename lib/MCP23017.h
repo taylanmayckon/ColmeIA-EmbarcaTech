@@ -69,5 +69,6 @@ void write_register(uint8_t MCP23017_address, uint8_t reg, uint8_t value);
 uint8_t read_register(uint8_t MCP23017_address, uint8_t reg);
 void MCP23017_init(MCP23017 *expander);
 void MCP23017_read_gpio(MCP23017 *expander);
+void exp_handle_flags(MCP23017 *expander);
 
 #endif

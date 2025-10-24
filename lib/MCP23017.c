@@ -53,3 +53,12 @@ void MCP23017_read_gpio(MCP23017 *expander){
     expander->portA.state = read_register(expander->address, MCP_GPIOA);
     expander->portB.state = read_register(expander->address, MCP_GPIOB);
 }
+
+
+// Atualiza as flags de interrupcao do expansor acionado
+void exp_handle_flags(MCP23017 *expander){
+    expander->intfA = read_register(expander->address, MCP_INTFA);
+    expander->intfB = read_register(expander->address, MCP_INTFB);
+    expander->capA  = read_register(expander->address, MCP_INTCAPA);
+    expander->capB  = read_register(expander->address, MCP_INTCAPB);
+}
