@@ -27,7 +27,7 @@ include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_i
 
 include_directories( ${CMAKE_SOURCE_DIR}/lib ) 
 
-add_executable(ApiSSense ApiSSense.c lib/MCP23017.c)
+add_executable(ApiSSense ApiSSense.cpp lib/MCP23017.cpp)
 
 pico_set_program_name(ApiSSense "ApiSSense")
 pico_set_program_version(ApiSSense "0.1")

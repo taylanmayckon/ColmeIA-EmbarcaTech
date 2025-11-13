@@ -22,23 +22,23 @@
 #define BEE_EVENT_TIMEOUT_MS 5000 // Tempo para descartar abelhas que nao completam a passagem
 #define BEE_PASSAGE_WINDOW_MS 2000 // Janela para aceitar uma passagem de abelha (A->B e B->A)
 
-// Expansores conectados
-MCP23017 expander1;
+// Expansores (MCP23017) conectados
+MCP23017 expander1(EXPANDER1_ADDR, EXPANDER1_INT_PIN);
 // Filas para cada expansor
 QueueHandle_t beeQueue1[2][NUM_CHANNELS_MCP]; // [0][X] PortA e [1][X] PortB
 // Semáforo para sinalizar interrupção de cada expansor
 SemaphoreHandle_t xSemaphoreInt1;
 
 // Contador principal de abelhas entrando
-uint32_t bee_counter = 0;
+int32_t bee_counter = 0;
 
 // Mutex para proteger acesso ao contador
 SemaphoreHandle_t xMutexCounter;
 
-void bee_update_queues(MCP23017 *expander, QueueHandle_t beeQueue[2][8]){
+void bee_update_queues(MCP23017 expander, QueueHandle_t beeQueue[2][8]){
     // Funcao para analisar as flags de interrupçao e popular as filas
-    uint8_t flagA = expander->intfA;
-    uint8_t flagB = expander->intfB;
+    uint8_t flagA = expander.getIntfA();
+    uint8_t flagB = expander.getIntfB();
     TickType_t current_time = xTaskGetTickCount();
 
     // Processa sensores da PORTA A (entrada da colmeia)
@@ -46,10 +46,10 @@ void bee_update_queues(MCP23017 *expander, QueueHandle_t beeQueue[2][8]){
         for(int i = 0; i < 8; i++) {
             if (flagA & (1 << i)) {
                 // Verifica se foi borda de descida (sensor ativado)
-                if ((expander->capA & (1 << i)) == 0) {
-                    printf("Sensor A%d ativado (ENTRADA DA COLMEIA)\n", i);
+                if ((expander.getCapA() & (1 << i)) == 0) {
+                    printf("%s: Sensor A%d ativado (ENTRADA DA COLMEIA)\n", pcTaskGetName(NULL), i);
                     if(xQueueSend(beeQueue[0][i], &current_time, 0) != pdPASS)
-                        printf("\n[QUEUE SEND] Erro ao registrar dado do Expansor %d, pino A%d\n.", expander->address, i);
+                        printf("\n%s: [QUEUE] Erro ao registrar dado do Expansor 0x%X, pino A%d\n.", pcTaskGetName(NULL), expander.getAddress(), i);
                 }
             }
         }
@@ -58,24 +58,16 @@ void bee_update_queues(MCP23017 *expander, QueueHandle_t beeQueue[2][8]){
     if(flagB){
         for(int i = 0; i < 8; i++) {
             if (flagB & (1 << i)) {
-                if((expander->capB & (1 << i)) == 0){
-                    printf("Sensor B%d ativado (DENTRO DA COLMEIA)\n", i);
+                if((expander.getCapB() & (1 << i)) == 0){
+                    printf("%s: Sensor B%d ativado (DENTRO DA COLMEIA)\n", pcTaskGetName(NULL), i);
                     if(xQueueSend(beeQueue[1][i], &current_time, 0) != pdPASS)
-                        printf("\n[QUEUE SEND] Erro ao registrar dado do Expansor %d, pino B%d.\n", expander->address, i);
+                        printf("\n%s: [QUEUE] Erro ao registrar dado do Expansor 0x%X, pino B%d.\n", pcTaskGetName(NULL), expander.getAddress(), i);
                 }
             }
         }
     }
 }
 
-
-// Atualiza as flags de interrupcao do expansor acionado
-void exp_handle_flags(MCP23017 *expander){
-    expander->intfA = read_register(expander->address, MCP_INTFA);
-    expander->intfB = read_register(expander->address, MCP_INTFB);
-    expander->capA  = read_register(expander->address, MCP_INTCAPA);
-    expander->capB  = read_register(expander->address, MCP_INTCAPB);
-}
 
 // ISR - apenas sinaliza o semáforo de cada expansor
 void gpio_irq_handler(uint gpio, uint32_t events){
@@ -93,10 +85,6 @@ void vExpander1(void *params) {
     // Essa funcao só serve pra capturar as interrupcoes e adicionar valores nas filas
     // Entao ela só precisa dessa parte de checar o semaforo da propria interrupcao no while(true)
     // O tratamento das filas fica para outra task
-    expander1.address = EXPANDER1_ADDR;
-    expander1.interrupt_pin = EXPANDER1_INT_PIN;
-    expander1.portA.iodir = 0b11111111; // Todos como entrada
-    expander1.portB.iodir = 0b11111111; // Todos como entrada
 
     // Inicializa as filas dos pares de sensores
     // beeQueue[PORT][CANAL], uma fila para cada canal (Entrada/Saida)
@@ -104,24 +92,23 @@ void vExpander1(void *params) {
         for(int j = 0; j<2; j++){
             beeQueue1[j][i] = xQueueCreate(BEE_QUEUE_LENGTH, sizeof(TickType_t));
             if (beeQueue1[j][i] == NULL) {
-                printf("Erro ao criar a fila para o sensor %d do port %d do expansor %d!\n", i, j, expander1.address);
+                printf("%s: Erro ao criar a fila para o sensor %d do port %d do expansor %d!\n", pcTaskGetName(NULL), i, j);
             }
         }
     }
     
     // Inicializando o semáforo para a interrupçao desse expansor
     xSemaphoreInt1 = xSemaphoreCreateBinary();
-    MCP23017_init(&expander1);
     // Limpa qualquer interrupção pendente
-    exp_handle_flags(&expander1);
+    expander1.handle_flags();
 
-    gpio_set_irq_enabled_with_callback(expander1.interrupt_pin, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
+    gpio_set_irq_enabled_with_callback(expander1.getInterruptPin(), GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
 
     while (true) {
         // Aguarda sinal de interrupção
         if(xSemaphoreTake(xSemaphoreInt1, portMAX_DELAY) == pdTRUE) {
-            exp_handle_flags(&expander1);
-            bee_update_queues(&expander1, beeQueue1);
+            expander1.handle_flags();
+            bee_update_queues(expander1, beeQueue1);
         }
     }
 }
@@ -145,7 +132,7 @@ void consume_individual_expander_queue(QueueHandle_t beeQueue[2][8]){
                     // Entrada válida
                     if(xSemaphoreTake(xMutexCounter, portMAX_DELAY) == pdTRUE){
                         bee_counter++;
-                        // printf("[ENTRADA VÁLIDA] no canal %d! Total: %lu\n", channel, bee_counter);
+                        printf("%s: ENTRADA VALIDA no canal %d! Total: %d\n", pcTaskGetName(NULL), channel, bee_counter);
                         xSemaphoreGive(xMutexCounter);
                     }
                     // Removendo os eventos processados
@@ -169,7 +156,7 @@ void consume_individual_expander_queue(QueueHandle_t beeQueue[2][8]){
                         // Por seguranca vou colocar uma validacao se o contador nao é 0
                         if(bee_counter)
                             bee_counter--;
-                        // printf("[FILA - SAIDA VÁLIDA] No canal %d! Total: %lu\n", channel, bee_counter);
+                        printf("%s: SAIDA VÁLIDA no canal %d! Total: %d\n", pcTaskGetName(NULL), channel, bee_counter);
                         xSemaphoreGive(xMutexCounter);
                     }
                     // Removendo os eventos processados
@@ -223,7 +210,7 @@ void vStatistics(void *params) {
         
         if(xSemaphoreTake(xMutexCounter, portMAX_DELAY) == pdTRUE) {
             printf("\n=== ESTATISTICAS ===\n");
-            printf("Total de abelhas detectadas: %lu\n", bee_counter);
+            printf("Total de abelhas detectadas: %d\n", bee_counter);
             printf("====================\n\n");
             xSemaphoreGive(xMutexCounter);
         }
@@ -242,15 +229,18 @@ int main(){
     gpio_pull_up(I2C_SDA);
     gpio_pull_up(I2C_SCL);
 
+    // Iniciando os expansores (MCP23017)
+    expander1.init();
+
     // Mutex para acesso do contador de abelhas
     xMutexCounter = xSemaphoreCreateMutex();
 
     // Cria as tasks
-    xTaskCreate(vExpander1, "Expansor1", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
-    xTaskCreate(vBeeConsumeQueuesTask, "Bee Consume Queues", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
+    xTaskCreate(vExpander1, "vExpander1", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
+    xTaskCreate(vBeeConsumeQueuesTask, "vBeeConsumeQueuesTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
     
     // Task opcional para debug
-    //xTaskCreate(vStatistics, "Statistics", configMINIMAL_STACK_SIZE + 128, NULL, 2, NULL);
+    xTaskCreate(vStatistics, "Statistics", configMINIMAL_STACK_SIZE + 128, NULL, 2, NULL);
     
     vTaskStartScheduler();
     panic_unsupported();
