@@ -18,7 +18,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(PICO_BOARD pico_w CACHE STRING "Board type")
 include(pico_sdk_import.cmake)
-project(ColmeIA-EmbarcaTech C CXX ASM)
+project(ApiSSense C CXX ASM)
 pico_sdk_init()
 
 # Adição do FreeRTOS no CMakeLists
@@ -27,23 +27,23 @@ include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_i
 
 include_directories( ${CMAKE_SOURCE_DIR}/lib ) 
 
-add_executable(ColmeIA-EmbarcaTech ColmeIA-EmbarcaTech.c lib/MCP23017.c)
+add_executable(ApiSSense ApiSSense.c lib/MCP23017.c)
 
-pico_set_program_name(ColmeIA-EmbarcaTech "ColmeIA-EmbarcaTech")
-pico_set_program_version(ColmeIA-EmbarcaTech "0.1")
+pico_set_program_name(ApiSSense "ApiSSense")
+pico_set_program_version(ApiSSense "0.1")
 
-pico_enable_stdio_uart(ColmeIA-EmbarcaTech 1)
-pico_enable_stdio_usb(ColmeIA-EmbarcaTech 1)
+pico_enable_stdio_uart(ApiSSense 1)
+pico_enable_stdio_usb(ApiSSense 1)
 
-target_link_libraries(ColmeIA-EmbarcaTech
+target_link_libraries(ApiSSense
         pico_stdlib
         hardware_gpio
         hardware_i2c
         FreeRTOS-Kernel 
         FreeRTOS-Kernel-Heap4)
 
-target_include_directories(ColmeIA-EmbarcaTech PRIVATE
+target_include_directories(ApiSSense PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
 )
 
-pico_add_extra_outputs(ColmeIA-EmbarcaTech)
+pico_add_extra_outputs(ApiSSense)
