@@ -49,25 +49,43 @@
 
 #define MCP_IOCON 0x0A
 
-typedef struct {
-    // Struct para armazenar as informaçoes de um conjunto de pinos (PORTA ou PORTB)
-    uint8_t iodir; // Direção dos pinos (1 = entrada, 0 = saída)
-    uint8_t state; // Estado atual dos pinos (1 = alto, 0 = baixo)
+
+typedef struct{
+    // Struct para armazenar as informações de um conjunto de pinos (PORTA ou PORTB)
+    uint8_t iodir; // Direçao dos pinos (1=entrada, 0=saida)
+    uint8_t state; // Estado atual dos pinos (1=alto, 0=baixo)
 } MCP23017_PortInfo;
 
-typedef struct {
-    uint8_t address; // Endereço I2C do MCP23017
-    int interrupt_pin; // Pino de interrupção conectado ao MCP23017
-    MCP23017_PortInfo portA; // Informações da PORTA
-    MCP23017_PortInfo portB; // Informações da PORTB
-    uint8_t intfA, intfB;
-    uint8_t capA, capB; 
-    // TickType_t last_interrupt_time; // Caso queira implementar debounce em cada expansor
-} MCP23017;
+class MCP23017{
+    private:
+        uint8_t address; // Endereco I2C do MCP23017
+        int interrupt_pin; // Pino de interrupcao conectado ao MCP23017
+        MCP23017_PortInfo portA; // Informações da PORTA
+        MCP23017_PortInfo portB; // Informações da PORTB
+        uint8_t intfA, intfB;
+        uint8_t capA, capB; 
+    public:
+        // Construtor
+        MCP23017(uint8_t addr, int int_pin);
 
-void write_register(uint8_t MCP23017_address, uint8_t reg, uint8_t value);
-uint8_t read_register(uint8_t MCP23017_address, uint8_t reg);
-void MCP23017_init(MCP23017 *expander);
-void MCP23017_read_gpio(MCP23017 *expander);
+        // Métodos
+        // Manipulacao de hardware
+        void init(); // Inicializa o MCP23017
+        void writeRegister(uint8_t reg, uint8_t value); // Escreve em um registrador
+        uint8_t readRegister(uint8_t reg); // Le um registrador
+        void readGPIO(); // Le o estado dos pinos GPIO
+        // Getters
+        uint8_t getPortAState(); // Retorna o estado atual do PortA
+        uint8_t getPortBState(); // Retorna o estado atual do PortB
+        uint8_t getIntfA(); 
+        uint8_t getIntfB();
+        uint8_t getCapA();
+        uint8_t getCapB();
+        uint8_t getAddress();
+        uint8_t getInterruptPin();
+
+        void handle_flags(); // Atualiza as flags do PortA e PortB
+};
+
 
 #endif
