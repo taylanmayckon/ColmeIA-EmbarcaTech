@@ -217,6 +217,14 @@ void vStatistics(void *params) {
     }
 }
 
+
+// Task para as Loadcells
+void vLoadCellsTask(void *params){
+    while(true){
+        
+    }
+}
+
 int main(){
     stdio_init_all();
     
@@ -238,6 +246,7 @@ int main(){
     // Cria as tasks
     xTaskCreate(vExpander1, "vExpander1", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
     xTaskCreate(vBeeConsumeQueuesTask, "vBeeConsumeQueuesTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
+    xTaskCreate(vLoadCellsTask, "vLoadCellsTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
     
     // Task opcional para debug
     xTaskCreate(vStatistics, "Statistics", configMINIMAL_STACK_SIZE + 128, NULL, 2, NULL);

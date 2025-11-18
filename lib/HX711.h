@@ -24,6 +24,10 @@ class HX711{
         void tare(int readings = 10);
         void set_scale(float scale);
         float get_units(int readings = 1);
+        float calibrate_auto(float known_weight, int readings = 20);
+        float calbirate_manual(float known_weight, int readings = 20);
 };
+
+
 
 #endif

@@ -1,6 +1,10 @@
 #include "pico/stdlib.h"
+#include <stdio.h>
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
+#include "FreeRTOS.h"
+#include "FreeRTOSConfig.h"
+#include "task.h"
 #include "HX711.h"
 #include "hx711.pio.h"
 
@@ -66,4 +70,34 @@ float HX711::get_units(int readings){
     for(int i = 0; i<readings; i++)
         sum += read_raw();
     return ((sum/readings) - _offset_value) / _scale;
+}
+
+
+float HX711::calibrate_auto(float known_weight, int readings){
+    // O peso (known_weight) tem que ser em gramas (g)
+    tare(readings);
+
+    int64_t sum = 0;
+    for(int i=0; i<readings; i++)
+        sum+=read_raw();
+    
+    float raw_units = (sum/readings) - _offset_value;
+    _scale = raw_units/known_weight;
+    return _scale;    
+}
+
+
+float HX711::calbirate_manual(float known_weight, int readings){
+    printf("\nRetire todos os pesos da balança.");
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    printf("\nTarando...");
+    tare(20);
+
+    printf("\nColoque o peso de %.2f g.\n", known_weight);
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    float raw_units = get_units(30); 
+    _scale = raw_units / known_weight;
+
+    printf("\nCalibrado! Scale = %.6f", _scale);
 }
