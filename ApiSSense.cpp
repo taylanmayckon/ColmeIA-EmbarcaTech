@@ -60,6 +60,10 @@ SemaphoreHandle_t xMutexCounter;
 
 HX711 loadcell1(loadcell1_dt, loadcell1_sck);
 
+// --- MQTT ---
+#include "lib/MqttClient.h"
+MqttClient mqttClient;
+
 
 void bee_update_queues(MCP23017 expander, QueueHandle_t beeQueue[2][8]){
     // Funcao para analisar as flags de interrupçao e popular as filas
@@ -263,6 +267,24 @@ void vLoadCellsTask(void *params){
 }
 
 
+// Task para enviar os dados via MQTT
+void vMqttReportTask(void *params){
+    // Buffer para criar o JSON
+    char json_payload[128]; 
+
+    while(true){
+        vTaskDelay(pdMS_TO_TICKS(60*1000));
+
+        // --- Envio dos dados de sensores nos tópicos
+        // Peso da balanca
+        snprintf(json_payload, sizeof(json_payload), 
+                 "{\"raw\": %d, \"tare\": %.2f}", 
+                 24.5, 0.9);
+        mqttClient.publish("apissense/loadcell1", json_payload);
+        
+    }
+}
+
 
 int main(){
     stdio_init_all();
@@ -283,6 +305,14 @@ int main(){
     // xMutexCounter = xSemaphoreCreateMutex();
 
     // // Cria as tasks
+    // Inicializa o MQTT
+    if (!mqttClient.begin()) {
+        printf("Falha ao iniciar MQTT!\n");
+    } else {
+        xTaskCreate(MqttClient::taskImpl, "MqttCore", 2048, &mqttClient, 2, NULL); // Task interna para conexão do MQTT
+        xTaskCreate(vMqttReportTask, "MqttReport", 2048, NULL, 2, NULL); // Task externa para gerar payloads e enviar dados para o broker
+    }
+
     // xTaskCreate(vExpander1, "vExpander1", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
     // xTaskCreate(vBeeConsumeQueuesTask, "vBeeConsumeQueuesTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
     xTaskCreate(vLoadCellsTask, "vLoadCellsTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);

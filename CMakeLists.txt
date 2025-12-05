@@ -28,7 +28,7 @@ include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_i
 
 include_directories( ${CMAKE_SOURCE_DIR}/lib ) 
 
-add_executable(ApiSSense ApiSSense.cpp lib/MCP23017.cpp lib/HX711.cpp)
+add_executable(ApiSSense ApiSSense.cpp lib/MCP23017.cpp lib/HX711.cpp lib/MqttClient.cpp)
 
 pico_generate_pio_header(ApiSSense ${CMAKE_CURRENT_LIST_DIR}/lib/hx711.pio OUTPUT_DIR ${CMAKE_CURRENT_LIST_DIR}/generated)
 
