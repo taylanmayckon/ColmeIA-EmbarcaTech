@@ -8,6 +8,12 @@
 #include "MCP23017.h"
 #include "HX711.h"
 
+#include "pico/cyw43_arch.h"        // Biblioteca para arquitetura Wi-Fi da Pico com CYW43  
+#include "lwip/apps/mqtt.h"         // Biblioteca LWIP MQTT -  fornece funções e recursos para conexão MQTT
+#include "lwip/apps/mqtt_priv.h"    // Biblioteca que fornece funções e recursos para Geração de Conexões
+#include "lwip/dns.h"               // Biblioteca que fornece funções e recursos suporte DNS:
+#include "lwip/altcp_tls.h"         // Biblioteca que fornece funções e recursos para conexões seguras usando TLS:
+
 // Configurações da I2C 
 #define I2C_PORT i2c0
 #define I2C_SDA 0
