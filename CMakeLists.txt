@@ -55,4 +55,8 @@ target_include_directories(ApiSSense PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
 )
 
+target_compile_definitions(ApiSSense PRIVATE
+    MBEDTLS_PLATFORM_MS_TIME_ALT
+)
+
 pico_add_extra_outputs(ApiSSense)

@@ -14,6 +14,14 @@
 #include "lwip/dns.h"               // Biblioteca que fornece funções e recursos suporte DNS:
 #include "lwip/altcp_tls.h"         // Biblioteca que fornece funções e recursos para conexões seguras usando TLS:
 
+// Correção do mbedtls para o FreeRTOS
+#include "pico/time.h" 
+// Esta função é chamada pelo mbedTLS para calcular timeouts
+unsigned long mbedtls_ms_time(void) {
+    // Retorna o tempo absoluto desde o boot em milissegundos
+    return to_ms_since_boot(get_absolute_time());
+}
+
 // Configurações da I2C 
 #define I2C_PORT i2c0
 #define I2C_SDA 0
