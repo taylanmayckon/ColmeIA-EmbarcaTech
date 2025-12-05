@@ -58,12 +58,12 @@ typedef struct{
 
 class MCP23017{
     private:
-        uint8_t address; // Endereco I2C do MCP23017
-        int interrupt_pin; // Pino de interrupcao conectado ao MCP23017
-        MCP23017_PortInfo portA; // Informações da PORTA
-        MCP23017_PortInfo portB; // Informações da PORTB
-        uint8_t intfA, intfB;
-        uint8_t capA, capB; 
+        uint8_t _address; // Endereco I2C do MCP23017
+        int _interrupt_pin; // Pino de interrupcao conectado ao MCP23017
+        MCP23017_PortInfo _portA; // Informações da PORTA
+        MCP23017_PortInfo _portB; // Informações da PORTB
+        uint8_t _intfA, _intfB;
+        uint8_t _capA, _capB; 
     public:
         // Construtor
         MCP23017(uint8_t addr, int int_pin);

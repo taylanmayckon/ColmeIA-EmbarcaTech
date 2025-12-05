@@ -2,17 +2,17 @@
 
 #include "hardware/i2c.h"
 
-MCP23017::MCP23017(uint8_t addr, int int_pin) : address(addr), interrupt_pin(int_pin){
-    this->portA.iodir = 0b11111111; // Todos como entrada
-    this->portB.iodir = 0b11111111; // Todos como entrada
+MCP23017::MCP23017(uint8_t addr, int int_pin) : _address(addr), _interrupt_pin(int_pin){
+    _portA.iodir = 0b11111111; // Todos como entrada
+    _portB.iodir = 0b11111111; // Todos como entrada
 }
 
 void MCP23017::init(){
     // Definindo a direcao dos pinos e habilitando pull-ups
-    writeRegister(MCP_IODIRA, portA.iodir);
-    writeRegister(MCP_GPPUA, portA.iodir);
-    writeRegister(MCP_IODIRB, portB.iodir);
-    writeRegister(MCP_GPPUB, portB.iodir);
+    writeRegister(MCP_IODIRA, _portA.iodir);
+    writeRegister(MCP_GPPUA, _portA.iodir);
+    writeRegister(MCP_IODIRB, _portB.iodir);
+    writeRegister(MCP_GPPUB, _portB.iodir);
 
     // Configurando interrupçoes
     // Ativa o modo espalhado: MIRROR = 1 (bit 6)
@@ -37,56 +37,56 @@ void MCP23017::init(){
 
 void MCP23017::writeRegister(uint8_t reg, uint8_t value){
     uint8_t data[2] = {reg, value};
-    i2c_write_blocking(I2C_PORT, address, data, 2, false);
+    i2c_write_blocking(I2C_PORT, _address, data, 2, false);
 }
 
 uint8_t MCP23017::readRegister(uint8_t reg){
     uint8_t value;
-    i2c_write_blocking(I2C_PORT, address, &reg, 1, true);
-    i2c_read_blocking(I2C_PORT, address, &value, 1, false);
+    i2c_write_blocking(I2C_PORT, _address, &reg, 1, true);
+    i2c_read_blocking(I2C_PORT, _address, &value, 1, false);
     return value;
 }
 
 void MCP23017::readGPIO(){
-    portA.state = readRegister(MCP_GPIOA);
-    portB.state = readRegister(MCP_GPIOB);
+    _portA.state = readRegister(MCP_GPIOA);
+    _portB.state = readRegister(MCP_GPIOB);
 }
 
 uint8_t MCP23017::getPortAState(){
-    return portA.state;
+    return _portA.state;
 }
 
 uint8_t MCP23017::getPortBState(){
-    return portB.state;
+    return _portB.state;
 }
 
 uint8_t MCP23017::getIntfA(){
-    return intfA;
+    return _intfA;
 }
 
 uint8_t MCP23017::getIntfB(){
-    return intfB;
+    return _intfB;
 }
 
 uint8_t MCP23017::getCapA(){
-    return capA;
+    return _capA;
 }
 
 uint8_t MCP23017::getCapB(){
-    return capB;
+    return _capB;
 }
 
 uint8_t MCP23017::getAddress(){
-    return address;
+    return _address;
 }
 
 uint8_t MCP23017::getInterruptPin(){
-    return interrupt_pin;
+    return _interrupt_pin;
 }
 
 void MCP23017::handle_flags(){
-    intfA = readRegister(MCP_INTFA);
-    intfB = readRegister(MCP_INTFB);
-    capA = readRegister(MCP_INTCAPA);
-    capB = readRegister(MCP_INTCAPB);
+    _intfA = readRegister(MCP_INTFA);
+    _intfB = readRegister(MCP_INTFB);
+    _capA = readRegister(MCP_INTCAPA);
+    _capB = readRegister(MCP_INTCAPB);
 }

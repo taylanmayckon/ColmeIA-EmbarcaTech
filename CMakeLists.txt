@@ -27,7 +27,9 @@ include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_i
 
 include_directories( ${CMAKE_SOURCE_DIR}/lib ) 
 
-add_executable(ApiSSense ApiSSense.cpp lib/MCP23017.cpp)
+add_executable(ApiSSense ApiSSense.cpp lib/MCP23017.cpp lib/HX711.cpp)
+
+pico_generate_pio_header(ApiSSense ${CMAKE_CURRENT_LIST_DIR}/lib/hx711.pio OUTPUT_DIR ${CMAKE_CURRENT_LIST_DIR}/generated)
 
 pico_set_program_name(ApiSSense "ApiSSense")
 pico_set_program_version(ApiSSense "0.1")
@@ -39,6 +41,8 @@ target_link_libraries(ApiSSense
         pico_stdlib
         hardware_gpio
         hardware_i2c
+        hardware_pio
+        hardware_clocks
         FreeRTOS-Kernel 
         FreeRTOS-Kernel-Heap4)
 

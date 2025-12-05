@@ -6,12 +6,14 @@
 #include "task.h"
 #include "semphr.h"
 #include "MCP23017.h"
+#include "HX711.h"
 
 // Configurações da I2C 
 #define I2C_PORT i2c0
 #define I2C_SDA 0
 #define I2C_SCL 1
 
+// --- EXPANSORES (MCP23017) --- 
 // Endereços e GPIO da ISR dos Expansores MCP23017
 #define EXPANDER1_ADDR 0x20
 #define EXPANDER1_INT_PIN 9
@@ -34,6 +36,16 @@ int32_t bee_counter = 0;
 
 // Mutex para proteger acesso ao contador
 SemaphoreHandle_t xMutexCounter;
+
+
+// --- Favos de Mel (LOADCELL) ---
+// Loadcell 1
+#define loadcell1_dt 19
+#define loadcell1_sck 18
+#define loadcell1_scale 26.598213f
+
+HX711 loadcell1(loadcell1_dt, loadcell1_sck);
+
 
 void bee_update_queues(MCP23017 expander, QueueHandle_t beeQueue[2][8]){
     // Funcao para analisar as flags de interrupçao e popular as filas
@@ -217,6 +229,27 @@ void vStatistics(void *params) {
     }
 }
 
+
+// Task para as Loadcells
+void vLoadCellsTask(void *params){
+    PIO pio = pio0;
+    uint offset = pio_add_program(pio, &hx711_program);
+    int sm = pio_claim_unused_sm(pio, true);
+
+    loadcell1.begin(pio, sm, offset);
+    loadcell1.set_scale(loadcell1_scale);
+    loadcell1.tare(20); 
+
+    while(true){
+        loadcell1.get_units(10);
+        printf("%s: Peso lido: %.2f g\n", pcTaskGetName(NULL), loadcell1.get_last_weight());
+        vTaskDelay(pdMS_TO_TICKS(2000)); 
+        // loadcell1.calbirate_manual(224.0f, 20);
+    }
+}
+
+
+
 int main(){
     stdio_init_all();
     
@@ -230,17 +263,18 @@ int main(){
     gpio_pull_up(I2C_SCL);
 
     // Iniciando os expansores (MCP23017)
-    expander1.init();
+    // expander1.init();
 
-    // Mutex para acesso do contador de abelhas
-    xMutexCounter = xSemaphoreCreateMutex();
+    // // Mutex para acesso do contador de abelhas
+    // xMutexCounter = xSemaphoreCreateMutex();
 
-    // Cria as tasks
-    xTaskCreate(vExpander1, "vExpander1", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
-    xTaskCreate(vBeeConsumeQueuesTask, "vBeeConsumeQueuesTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
+    // // Cria as tasks
+    // xTaskCreate(vExpander1, "vExpander1", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
+    // xTaskCreate(vBeeConsumeQueuesTask, "vBeeConsumeQueuesTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
+    xTaskCreate(vLoadCellsTask, "vLoadCellsTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
     
     // Task opcional para debug
-    xTaskCreate(vStatistics, "Statistics", configMINIMAL_STACK_SIZE + 128, NULL, 2, NULL);
+    // xTaskCreate(vStatistics, "Statistics", configMINIMAL_STACK_SIZE + 128, NULL, 2, NULL);
     
     vTaskStartScheduler();
     panic_unsupported();

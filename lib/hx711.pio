@@ -1,0 +1,26 @@
+.program hx711
+
+start:
+    wait 0 pin 0          ; Espera DOUT = LOW (HX711 pronto)
+    
+    pull block            ; Recebe número de pulsos de ganho
+    mov x, osr
+    
+    set y, 23             ; Contador: 24 bits (0-23)
+    
+read_loop:
+    set pins, 0 [1]       ; Clock = LOW
+    set pins, 1 [1]       ; Clock = HIGH
+    in pins, 1            ; Lê o bit
+    jmp y--, read_loop    ; Repete 24 vezes
+    
+    set pins, 0           ; Clock = LOW
+    push block            ; Envia os 24 bits lidos
+    
+    ; Pulsos de ganho (X+1 pulsos)
+gain_loop:
+    set pins, 1 [1]       ; Clock = HIGH
+    set pins, 0 [1]       ; Clock = LOW
+    jmp x--, gain_loop
+    
+    jmp start             ; Volta para aguardar próxima leitura
