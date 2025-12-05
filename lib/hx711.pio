@@ -1,26 +1,26 @@
 .program hx711
-.side_set 1
 
-; Relacao pulsos extras -> ganho
-; 1 pulso = Canal A, Ganho 128
-; 2 pulsos = Canal B, Ganho 32
-; 3 pulsos = Canal A, Ganho 64
-
-public entry_point:
-    pull block          side 0 ; Pega a config de ganho do FIFO (CPU)
-    out x, 32           side 0 ; Armazena esse número em X (contador de pulsos extras)
-    wait 0 pin 0        side 0 ; Espera o pino de dados (DOUT) ir para 0 (LOW) -> Data Ready
-    set y, 23           side 0 ; Le 24 bits (contador y vai de 23 até 0)
-
+start:
+    wait 0 pin 0          ; Espera DOUT = LOW (HX711 pronto)
+    
+    pull block            ; Recebe número de pulsos de ganho
+    mov x, osr
+    
+    set y, 23             ; Contador: 24 bits (0-23)
+    
 read_loop:
-    nop                 side 1 [1] ; Sobe Clock, espera 1 ciclo
-    in pins, 1          side 0 [1] ; Lê bit, Desce Clock, espera 1 ciclo
-    jmp y-- read_loop   side 0     ; Repete até ler os 24 bits
-
-    ; Agora da os pulsos extras para configurar o ganho da proxima leitura.
-
+    set pins, 0 [1]       ; Clock = LOW
+    set pins, 1 [1]       ; Clock = HIGH
+    in pins, 1            ; Lê o bit
+    jmp y--, read_loop    ; Repete 24 vezes
+    
+    set pins, 0           ; Clock = LOW
+    push block            ; Envia os 24 bits lidos
+    
+    ; Pulsos de ganho (X+1 pulsos)
 gain_loop:
-    nop                 side 1 [1] ; Sobe Clock (apenas pulso, sem leitura)
-    nop                 side 0 [1] ; Desce Clock
-    jmp x-- gain_loop   side 0     ; Repete X vezes 
-    push block          side 0     ; Empurra os 24 bits lidos para o programa C
+    set pins, 1 [1]       ; Clock = HIGH
+    set pins, 0 [1]       ; Clock = LOW
+    jmp x--, gain_loop
+    
+    jmp start             ; Volta para aguardar próxima leitura
