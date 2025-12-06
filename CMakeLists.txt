@@ -26,6 +26,9 @@ pico_sdk_init()
 set(FREERTOS_KERNEL_PATH "${CMAKE_SOURCE_DIR}/lib/FreeRTOS-Kernel-11.2.0")
 include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_import.cmake)
 
+# Adição da biblioteca para o SGP40
+add_subdirectory(lib/SGP40)
+
 include_directories( ${CMAKE_SOURCE_DIR}/lib ) 
 
 add_executable(ApiSSense ApiSSense.cpp lib/MCP23017.cpp lib/HX711.cpp lib/MqttClient.cpp)
@@ -49,7 +52,8 @@ target_link_libraries(ApiSSense
         pico_mbedtls
         pico_lwip_mbedtls
         FreeRTOS-Kernel 
-        FreeRTOS-Kernel-Heap4)
+        FreeRTOS-Kernel-Heap4
+        SGP40_Driver)
 
 target_include_directories(ApiSSense PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
