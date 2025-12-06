@@ -8,6 +8,13 @@
 #include "MCP23017.h"
 #include "HX711.h"
 
+extern "C" {
+    // Bibliotecas do SGP40 
+    #include "sensirion_i2c_hal.h"
+    #include "sgp40_i2c.h"
+    #include "sensirion_gas_index_algorithm.h"
+}
+
 #include "pico/cyw43_arch.h"        // Biblioteca para arquitetura Wi-Fi da Pico com CYW43  
 #include "lwip/apps/mqtt.h"         // Biblioteca LWIP MQTT -  fornece funções e recursos para conexão MQTT
 #include "lwip/apps/mqtt_priv.h"    // Biblioteca que fornece funções e recursos para Geração de Conexões
@@ -63,6 +70,9 @@ SemaphoreHandle_t xMutexCounter;
 #define loadcell1_scale 26.598213f
 
 HX711 loadcell1(loadcell1_dt, loadcell1_sck);
+
+// Sensor de Compostos Voláteis
+volatile int32_t global_voc_index = 0;
 
 // --- MQTT ---
 #include "lib/MqttClient.h"
@@ -268,6 +278,43 @@ void vLoadCellsTask(void *params){
     }
 }
 
+void vVOCSensorTask(void *params){
+    GasIndexAlgorithmParams voc_params;
+    GasIndexAlgorithm_init(&voc_params, GasIndexAlgorithm_ALGORITHM_TYPE_VOC);
+
+    uint16_t serial_number[3];
+    int16_t error = sgp40_get_serial_number(serial_number, 3);
+    
+    if (error) {
+        printf("ERRO CRITICO: SGP40 nao encontrado! (Cod: %d)\n", error);
+    } else {
+        printf("SGP40 Iniciado. Serial: %04x%04x%04x\n", serial_number[0], serial_number[1], serial_number[2]);
+    }
+
+    // Parâmetros fixos de compensação (50% RH, 25°C)
+    // Discutir sobre injetar valores reais do sensor DHT aqui
+    uint16_t default_rh = 0x8000;
+    uint16_t default_t = 0x6666;
+    uint16_t sraw_voc = 0;
+    int32_t voc_index = 0;
+
+    TickType_t xLastWakeTime;
+    const TickType_t xFrequency = pdMS_TO_TICKS(1000);
+
+    // Inicializa o tempo para garantir 1s exato entre execuções
+    xLastWakeTime = xTaskGetTickCount();
+
+    while (true) {
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+        error = sgp40_measure_raw_signal(default_rh, default_t, &sraw_voc);
+        if (error) {
+            printf("SGP40: Erro de leitura (%d)\n", error);
+        } else {
+            GasIndexAlgorithm_process(&voc_params, sraw_voc, &voc_index); // Output
+            global_voc_index = voc_index;
+        }
+    }
+}
 
 // Task para enviar os dados via MQTT
 void vMqttReportTask(void *params){
@@ -291,12 +338,18 @@ void vMqttReportTask(void *params){
                  "{\"raw\": %.2f, \"tare\": %.2f}", 
                  24.5, 0.9);
         mqttClient.publish("apissense/loadcell1", json_payload);
+
+        snprintf(json_payload, sizeof(json_payload), 
+                 "{\"index\": %ld}", 
+                 global_voc_index);    
+        mqttClient.publish("apissense/voc", json_payload);
     }
 }
 
 
 int main(){
     stdio_init_all();
+    sensirion_i2c_hal_init();
     
     bee_counter.in = 0;
     bee_counter.out = 0;
@@ -326,6 +379,7 @@ int main(){
     // xTaskCreate(vExpander1, "vExpander1", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
     // xTaskCreate(vBeeConsumeQueuesTask, "vBeeConsumeQueuesTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
     // xTaskCreate(vLoadCellsTask, "vLoadCellsTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
+    xTaskCreate(vVOCSensorTask, "vVOCSensorTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
     
     // Task opcional para debug
     // xTaskCreate(vStatistics, "Statistics", configMINIMAL_STACK_SIZE + 128, NULL, 2, NULL);
