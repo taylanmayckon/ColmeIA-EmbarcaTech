@@ -8,9 +8,9 @@
 #include "task.h"
 
 // Configurações do MQTT
-#define WIFI_SSID "SEU_WIFI_SSID"
-#define WIFI_PASS "SUA_WIFI_SENHA"
-#define MQTT_BROKER_IP "192.168.1.107" // IP do seu Broker
+#define WIFI_SSID "Jr telecom _ Taylan"
+#define WIFI_PASS "Suta3021"
+#define MQTT_BROKER_IP "192.168.18.165" // IP do seu Broker
 #define BROKER_PORT 1883
 #define MQTT_MSG_QUEUE_SIZE 120 // Quantas mensagens guardar se estiver offline
 

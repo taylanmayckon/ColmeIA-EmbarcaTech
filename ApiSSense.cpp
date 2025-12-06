@@ -45,8 +45,12 @@ QueueHandle_t beeQueue1[2][NUM_CHANNELS_MCP]; // [0][X] PortA e [1][X] PortB
 // Semáforo para sinalizar interrupção de cada expansor
 SemaphoreHandle_t xSemaphoreInt1;
 
-// Contador principal de abelhas entrando
-int32_t bee_counter = 0;
+// Contador principal de abelhas 
+typedef struct{
+    int32_t in;
+    int32_t out;
+} bee_counter_t;
+bee_counter_t bee_counter;
 
 // Mutex para proteger acesso ao contador
 SemaphoreHandle_t xMutexCounter;
@@ -161,8 +165,8 @@ void consume_individual_expander_queue(QueueHandle_t beeQueue[2][8]){
                 if((exit_time - entry_time) <= pdMS_TO_TICKS(BEE_PASSAGE_WINDOW_MS)){
                     // Entrada válida
                     if(xSemaphoreTake(xMutexCounter, portMAX_DELAY) == pdTRUE){
-                        bee_counter++;
-                        printf("%s: ENTRADA VALIDA no canal %d! Total: %d\n", pcTaskGetName(NULL), channel, bee_counter);
+                        bee_counter.in++;
+                        printf("%s: ENTRADA VALIDA no canal %d! Total de entradas: %d\n", pcTaskGetName(NULL), channel, bee_counter.in);
                         xSemaphoreGive(xMutexCounter);
                     }
                     // Removendo os eventos processados
@@ -182,11 +186,8 @@ void consume_individual_expander_queue(QueueHandle_t beeQueue[2][8]){
                 if((entry_time - exit_time) <= pdMS_TO_TICKS(BEE_PASSAGE_WINDOW_MS)){
                     // Saida valida
                     if(xSemaphoreTake(xMutexCounter, portMAX_DELAY) == pdTRUE){
-                        // NOTA: Será que isso vai bugar o código? E se uma abelha sai na hora que o sistema liga?
-                        // Por seguranca vou colocar uma validacao se o contador nao é 0
-                        if(bee_counter)
-                            bee_counter--;
-                        printf("%s: SAIDA VÁLIDA no canal %d! Total: %d\n", pcTaskGetName(NULL), channel, bee_counter);
+                        bee_counter.out--;
+                        printf("%s: SAIDA VÁLIDA no canal %d! Total de saidas: %d\n", pcTaskGetName(NULL), channel, bee_counter.out);
                         xSemaphoreGive(xMutexCounter);
                     }
                     // Removendo os eventos processados
@@ -240,7 +241,8 @@ void vStatistics(void *params) {
         
         if(xSemaphoreTake(xMutexCounter, portMAX_DELAY) == pdTRUE) {
             printf("\n=== ESTATISTICAS ===\n");
-            printf("Total de abelhas detectadas: %d\n", bee_counter);
+            printf("Total de abelhas ENTRADA: %d\n", bee_counter.in);
+            printf("Total de abelhas SAIDA: %d\n", bee_counter.out);
             printf("====================\n\n");
             xSemaphoreGive(xMutexCounter);
         }
@@ -273,15 +275,22 @@ void vMqttReportTask(void *params){
     char json_payload[128]; 
 
     while(true){
-        vTaskDelay(pdMS_TO_TICKS(60*1000));
+        vTaskDelay(pdMS_TO_TICKS(60*1000)); // 1 minuto
+
+        // Coloca proteções com Mutex caso alguns valores saiam bugados, pelo que vi só é thread safe a leitura de variaveis de 32 bits
 
         // --- Envio dos dados de sensores nos tópicos
+        // Fluxo de abelhas
+        snprintf(json_payload, sizeof(json_payload), 
+                 "{\"in\": %d, \"out\": %d}", 
+                 bee_counter.in, bee_counter.out);
+        mqttClient.publish("apissense/beecount", json_payload);
+
         // Peso da balanca
         snprintf(json_payload, sizeof(json_payload), 
-                 "{\"raw\": %d, \"tare\": %.2f}", 
+                 "{\"raw\": %.2f, \"tare\": %.2f}", 
                  24.5, 0.9);
         mqttClient.publish("apissense/loadcell1", json_payload);
-        
     }
 }
 
@@ -289,7 +298,8 @@ void vMqttReportTask(void *params){
 int main(){
     stdio_init_all();
     
-    bee_counter = 0;
+    bee_counter.in = 0;
+    bee_counter.out = 0;
 
     // Iniciando o I2C 
     i2c_init(I2C_PORT, 400 * 1000);
@@ -315,7 +325,7 @@ int main(){
 
     // xTaskCreate(vExpander1, "vExpander1", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
     // xTaskCreate(vBeeConsumeQueuesTask, "vBeeConsumeQueuesTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
-    xTaskCreate(vLoadCellsTask, "vLoadCellsTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
+    // xTaskCreate(vLoadCellsTask, "vLoadCellsTask", configMINIMAL_STACK_SIZE + 256, NULL, 4, NULL);
     
     // Task opcional para debug
     // xTaskCreate(vStatistics, "Statistics", configMINIMAL_STACK_SIZE + 128, NULL, 2, NULL);
